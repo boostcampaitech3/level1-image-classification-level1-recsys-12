@@ -32,6 +32,7 @@ def args_getter():
     parser.add_argument("--lr", required=False, default=0.01, type=float, help="Learning rate (default=0.01)")
     parser.add_argument("--name", required=False, default="ResNet18", help="Model name (if you use pre-trained, \
                                                                             write pre-trained model name)")
+    parser.add_argument("save", default=str, help="Save the experiments")
     #parser.add_argument("--m", required=False, default=None, type=float, help="momentum (default=0.9)")
 
     args = parser.parse_args()
@@ -78,6 +79,7 @@ def record_expr(model, model_name, best_train_loss, best_train_score, avg_val_lo
     current_time = datetime.now(pytz.timezone('Asia/Seoul')).strftime("%Y-%m-%d %H:%M:%S")
 
     os.system(f"echo '|{current_time}|{model_name}|{best_train_loss:.3g}|{best_train_score:.3g}|{avg_val_loss:.3g}|{avg_val_score:.3g}|{str(vars(args))}|' >> {markdown_path}")
+    print("Save the experiment complete!")
 
 
 def main(args):
@@ -128,7 +130,7 @@ def main(args):
     # model = CustomModel(num_classes=18).to(device)
 
     # ResNet 18 load and transfer learning
-    model = torchvision.models.resnet18(pretrained=False)
+    model = torchvision.models.resnet18(pretrained=True)
     model.fc = torch.nn.Linear(in_features=512, out_features=18, bias=True)
     torch.nn.init.xavier_uniform_(model.fc.weight)
     stdv = 1/np.sqrt(512)
@@ -138,7 +140,7 @@ def main(args):
     # optimizer, loss setting
     optimizer = optim.Adam(params=model.parameters(), lr=args.lr)
     criterion = nn.CrossEntropyLoss().to(device)
-    f1_score = F1Score(num_classes=18).to(device)
+    f1_score = F1Score(num_classes=18, average="macro").to(device)
 
     train_loss_history = []
     val_loss_history = []
@@ -174,7 +176,7 @@ def main(args):
                 outputs = torch.argmax(pred, dim=-1)
                 f1_best = f1_score(outputs, classes)
 
-                print(f"---------------------- Best Model Save! epoch {epoch} - batch {idx} : loss {loss.data} ----------------------")
+                print(f"---------------------- Best Model Save! epoch {epoch} - batch {idx} : loss {loss.data:.5g} / F1 {f1_best:.4g} ----------------------")
 
         if args.epochs < 100:
             if epoch % 10 == 0:
@@ -188,6 +190,7 @@ def main(args):
     f1 = 0
     avg_score = 0
     test_loss = 0.0
+    counts = 0
 
     print("Evaluation Start")
 
@@ -203,14 +206,17 @@ def main(args):
             corrects += pred.eq(label.view_as(pred)).sum().item()
             test_loss += loss
             f1 += f1_score(pred, label)
+            counts += 1
 
         acc = corrects / len(valid_dataset)
-        f1 = f1 / len(valid_dataset)
-        test_loss = test_loss/len(valid_dataset)
+        f1 = f1 / counts
+        test_loss = test_loss/counts
 
         print(f"Avg Accuracy : {acc :.3g} | Avg F1 Score {f1 : .3g} - Avg loss : {test_loss:.5g}")
 
-    record_expr(best_model, args.name, prev_loss, f1_best, test_loss, f1, args)
+    if args.save.lower() == "true":
+        record_expr(best_model, args.name, prev_loss, f1_best, test_loss, f1, args)
+
 
 if __name__ == '__main__':
     args = args_getter()
