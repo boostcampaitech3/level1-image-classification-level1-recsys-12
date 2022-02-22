@@ -7,6 +7,6 @@
 - `d` : drop out layer가 존재한다면 ratio parameter
 - `lr` : learning rate
 
-| Date | Model name | Best loss | F1 Score | Avg Val Loss | Avf Val F1 Score | Hyperparameters |
+| Date | Model name | Best loss | F1 Score | Avg Val Loss | Avg Val F1 Score | Hyperparameters |
 |:--:|:---:|:---:|:---:|:---:|:---:|:---:|
-|2022-02-22 08:07:21|ResNet18|0.00743|1|0.0176|0.0264|{epochs: 10, batch_size: 32, d: 0.5, lr: 0.01, name: ResNet18}|
+|2022-02-22 17:07:21|ResNet18|0.00743|1|0.0176|0.0264|{epochs: 10, batch_size: 32, d: 0.5, lr: 0.01, name: ResNet18}|

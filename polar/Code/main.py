@@ -3,12 +3,14 @@ import argparse
 
 import torchvision.models
 from PIL import Image
-from datetime import datetime
+from datetime import datetime, timezone
+import pytz
 
 import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.functional as F
+from torchmetrics import F1Score
 
 import numpy as np
 import pandas as pd
@@ -28,20 +30,13 @@ def args_getter():
     parser.add_argument("--batch_size", required=False, default=32, type=int, help="Num of batch size (default=32)")
     parser.add_argument("--d", required=False, default=0.5, type=float, help="dropout ratio (default=0.5)")
     parser.add_argument("--lr", required=False, default=0.01, type=float, help="Learning rate (default=0.01)")
-    parser.add_argument("--m", required=False, default=0.9, type=float, help="momentum (default=0.9)")
+    parser.add_argument("--name", required=False, default="ResNet18", help="Model name (if you use pre-trained, \
+                                                                            write pre-trained model name)")
+    #parser.add_argument("--m", required=False, default=None, type=float, help="momentum (default=0.9)")
 
     args = parser.parse_args()
 
     return args
-
-
-def get_age_range(x):
-    if x < 30:
-        return 0
-    elif x < 60:
-        return 1
-    else:
-        return 2
 
 
 def make_img_path_df(path, output_dir=None, train=True):
@@ -68,11 +63,21 @@ def make_img_path_df(path, output_dir=None, train=True):
                 gender = 0 if row['gender'] == "male" else 1
                 data = {
                     'path': os.path.join(path, row['path'], file),
-                    'class':mask*6 + gender*3 + get_age_range(row['age'])
+                    'class':mask*6 + gender*3 + min(2, row['age']//30)
                 }
                 df = df.append(data, ignore_index=True)
 
         df.to_csv(output_dir, index=False)
+
+
+def record_expr(model, model_name, best_train_loss, best_train_score, avg_val_loss, avg_val_score, args):
+    # | Date | model_name | best_loss | f1 score | avg val loss | avg val f1 score | Hyperparameters |
+    base_url = '/opt/ml'
+    model_state_save_path = base_url+'/level1-image-classification-level1-recsys-12/polar/model_state'
+    markdown_path = base_url+'/level1-image-classification-level1-recsys-12/polar/README.md'
+    current_time = datetime.now(pytz.timezone('Asia/Seoul')).strftime("%Y-%m-%d %H:%M:%S")
+
+    os.system(f"echo '|{current_time}|{model_name}|{best_train_loss:.3g}|{best_train_score:.3g}|{avg_val_loss:.3g}|{avg_val_score:.3g}|{str(vars(args))}|' >> {markdown_path}")
 
 
 def main(args):
@@ -128,17 +133,18 @@ def main(args):
     torch.nn.init.xavier_uniform_(model.fc.weight)
     stdv = 1/np.sqrt(512)
     model.fc.bias.data.uniform_(-stdv, stdv)
-
     model.to(device)
 
+    # optimizer, loss setting
     optimizer = optim.Adam(params=model.parameters(), lr=args.lr)
-
     criterion = nn.CrossEntropyLoss().to(device)
+    f1_score = F1Score(num_classes=18).to(device)
 
     train_loss_history = []
     val_loss_history = []
 
     prev_loss = 1000.0
+    f1_best = 0
     best_model = None
     # training
     for epoch in range(1, args.epochs+1):
@@ -164,6 +170,10 @@ def main(args):
                 prev_loss = loss.data
                 torch.save(model, os.path.join(save_model_path, 'custom_best_model.pt'))
                 best_model = model
+
+                outputs = torch.argmax(pred, dim=-1)
+                f1_best = f1_score(outputs, classes)
+
                 print(f"---------------------- Best Model Save! epoch {epoch} - batch {idx} : loss {loss.data} ----------------------")
 
         if args.epochs < 100:
@@ -173,24 +183,37 @@ def main(args):
             if epoch % 100 == 0:
                 print(f"epoch {epoch} batch {idx} - loss: {loss.data}")
 
-    # validation
+    # validation/test
+    best_model.eval()
+    f1 = 0
+    avg_score = 0
+    test_loss = 0.0
+
+    print("Evaluation Start")
+
     with torch.no_grad():
         corrects = 0
-        test_loss = 0.0
+
         for k, (img, label) in enumerate(val_loader):
             img, label = img.to(device), label.to(device)
 
             output = best_model(img)
             loss = criterion(output, label)
-            pred = output.argmax(dim=1)
+            pred = torch.argmax(output, dim=-1)
             corrects += pred.eq(label.view_as(pred)).sum().item()
             test_loss += loss
+            f1 += f1_score(pred, label)
 
         acc = corrects / len(valid_dataset)
-        print(f"Accuracy : {acc :.2g} - loss : {test_loss/len(valid_dataset)}")
+        f1 = f1 / len(valid_dataset)
+        test_loss = test_loss/len(valid_dataset)
 
+        print(f"Avg Accuracy : {acc :.3g} | Avg F1 Score {f1 : .3g} - Avg loss : {test_loss:.5g}")
+
+    record_expr(best_model, args.name, prev_loss, f1_best, test_loss, f1, args)
 
 if __name__ == '__main__':
     args = args_getter()
     main(args)
+
     print("============================ Run End ============================")
