@@ -1,14 +1,13 @@
-# RecSys 12 - Mask Classification Project
+# Polar Model Experiment Logs
 
-제가 적당히 pretrained model을 활용한 베이스라인을 작성했습니다.  
+## Hyperparameter 설명
 
-`CustomModel`은 베이스라인으로 제공해준 모델인데 효과가 정말 구립니다.  
+- `epochs` : 훈련에 진행한 epoch 수
+- `batch_size` : batch size 크기
+- `d` : drop out layer가 존재한다면 ratio parameter
+- `lr` : learning rate
 
-일단 대략적인 성능은 저희 평가 지표가 F1-Score지만 Accuracy로 작성하겠습니다.
-전체 train data 중 30%를 valid set으로 분리해서 validation 데이터로 테스트한 결과입니다.
-
-- Baseline by boostcamp
-	- acc : 0.26
-
-- Baseline by ResNet18
-	- acc : 0.88
+| Date | Model name | Best loss | F1 Score | Avg Val Loss | Avg Val F1 Score | Hyperparameters |
+|:--:|:---:|:---:|:---:|:---:|:---:|:---:|
+|2022-02-22 17:07:21|ResNet18|0.00743|1|0.0176|0.0264|{epochs: 10, batch_size: 32, d: 0.5, lr: 0.01, name: ResNet18}|
+|2022-02-22 22:11:31|ResNet18|0.0285|1|0.454|0.77|{epochs: 10, batch_size: 32, d: 0.5, lr: 0.01, name: ResNet18, save: true}|
