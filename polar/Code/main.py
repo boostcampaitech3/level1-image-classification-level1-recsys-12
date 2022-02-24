@@ -1,5 +1,6 @@
 from utils import *
 
+import wandb
 import os
 
 import torchvision.models
@@ -14,7 +15,7 @@ import numpy as np
 import pandas as pd
 from Datasets import CustomDataSet, CustomDataSet2
 from torch.utils.data import DataLoader
-from Models import CustomModel
+from Models import CustomModel, MobileNet
 
 from sklearn.model_selection import train_test_split
 
@@ -23,6 +24,10 @@ from torchvision.transforms import Resize, ToTensor, Normalize
 
 
 def main(args):
+    # wandb set
+    config = {"epochs": args.epochs, "batch_size": args.batch_size, "learning_rate": args.learning_rate}
+    wandb.init(project="P-stage-1-Image-Classification", entity="kbp0237", config=config)
+
     # directories
     base_dir = '/opt/ml'
     train_dir = base_dir+'/input/data/train/images'
@@ -53,7 +58,7 @@ def main(args):
     # DataSet and Loader Setting
     pre_transform = transforms.Compose([
         Resize((512//3, 284//3)),
-        transforms.CenterCrop((64, 64)),
+        # transforms.CenterCrop((64, 64)),
     ])
 
     transform = transforms.Compose([
@@ -75,11 +80,12 @@ def main(args):
     # model = CustomModel(num_classes=18).to(device)
 
     # ResNet 18 load and transfer learning
-    model = torchvision.models.resnet18(pretrained=False)
-    model.fc = torch.nn.Linear(in_features=512, out_features=18, bias=True)
-    torch.nn.init.xavier_uniform_(model.fc.weight)
-    stdv = 1/np.sqrt(512)
-    model.fc.bias.data.uniform_(-stdv, stdv)
+    # model = torchvision.models.resnet18(pretrained=False)
+    # model.fc = torch.nn.Linear(in_features=512, out_features=18, bias=True)
+    # torch.nn.init.xavier_uniform_(model.fc.weight)
+    # stdv = 1/np.sqrt(512)
+    # model.fc.bias.data.uniform_(-stdv, stdv)
+    model = MobileNet(alpha=1, num_classes=18)
     model.to(device)
 
     # optimizer, loss setting
@@ -98,7 +104,9 @@ def main(args):
     print("Start Training...")
     for epoch in range(1, args.epochs+1):
         model.train()
-        running_loss = 0.0
+        epoch_loss = 0.0
+        epoch_f1 = 0.0
+        count = 0
         for idx, (imgs, classes) in enumerate(train_loader):
             imgs, classes = imgs.to(device), classes.to(device)
 
@@ -112,11 +120,14 @@ def main(args):
             loss.backward()
             optimizer.step()
 
-            if prev_loss > loss:
-                prev_loss = loss
+            epoch_loss += loss.item()
+            epoch_f1 += f1
+            count += 1
 
             if idx % 100 == 99:
-                print(f"Epoch {epoch} Batch {idx+1} - Train loss : {loss:.6g} | F1 score : {f1:.4g}")
+                print(f"Epoch {epoch+0:03} Batch {idx+1} - Train loss : {loss:.5f} | F1 score : {f1:.4f}")
+        train_loss = epoch_loss / count
+        train_f1 = epoch_f1 / count
 
         model.eval()
         val_loss = 0.0
@@ -138,13 +149,16 @@ def main(args):
 
             val_loss = val_loss/count
             val_f1 = val_f1/count
-            print(f"Epoch {epoch} - Avg Validation loss : {val_loss:.6g} | Avg F1 Score : {val_f1:.4g}")
+            print(f"Epoch {epoch+0:03} - Avg Validation loss : {val_loss:.5f} | Avg F1 Score : {val_f1:.4f}")
 
             # check best validation model
             if prev_val_loss > val_loss:
                 prev_val_loss = val_loss
                 best_model = model
                 f1_best = val_f1
+
+            wandb.log({"Loss": {"train loss": train_loss, "val loss": val_loss},
+                       "F1 Score": {"train f1": train_f1, "val f1": val_f1}})
 
     if args.save.lower() == "true":
         record_expr(best_model, args.name, prev_loss, val_loss, val_f1, f1_best, args)
@@ -167,7 +181,6 @@ def test(best_model, device):
 
     pre_transform = transforms.Compose([
         Resize((512 // 3, 284 // 3)),
-        transforms.CenterCrop((64, 64)),
     ])
 
     transform = transforms.Compose([

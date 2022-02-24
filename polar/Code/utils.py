@@ -100,6 +100,6 @@ def record_expr(model, model_name, best_train_loss, avg_val_loss, avg_val_score,
 
     current_time = current_time.strftime("%Y-%m-%d %H:%M:%S")
 
-    os.system(f"echo '|{current_time}|{model_name}|{best_train_loss:.3g}|{avg_val_loss:.3g}|{avg_val_loss:.3g}|\
-                        {avg_val_score:.3g}|{best_val_f1:.3g}|{str(hypers)}|' >> {markdown_path}")
+    os.system(f"echo '|{current_time}|{model_name}|{best_train_loss:.3g}|{avg_val_loss:.3g}|"
+              f"{avg_val_score:.3g}|{best_val_f1:.3g}|{str(hypers)}|' >> {markdown_path}")
     print("Save the experiment complete!")
