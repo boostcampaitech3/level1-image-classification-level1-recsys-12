@@ -49,6 +49,9 @@ class CustomDataSet2(Dataset):
     def __len__(self):
         return len(self.images)
 
+    def data_split(self):
+        pass
+
 
 class EnsembleDataSet(Dataset):
     def __init__(self, df, pre_transforms=None, transforms=None, train=True):
