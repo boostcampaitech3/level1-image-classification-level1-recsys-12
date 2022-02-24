@@ -2,7 +2,7 @@
 
 # 코딩 컨벤션
 - [Python black](https://velog.io/@gyuseok-dev/Python.-Black-the-Code-Formatter)
-    - 커밋시에는 무조건 black 해서 올리기?
+    - 커밋시에는 무조건 black 해서 올리기
 - 변수명 통일
     - learning rate : "lr"
     
