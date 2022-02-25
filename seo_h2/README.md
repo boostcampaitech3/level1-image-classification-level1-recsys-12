@@ -1,0 +1,2 @@
+| Date | Model name | Best loss | Avg Val Loss | Avg Val F1 Score | Best F1 Score | Hyperparameters |
+|:--:|:---:|:---:|:---:|:---:|:---:|:---:||2022-02-25 14:54:31|test|1.1|1.03|0.416|0.416|{seed: 42, epochs: 2, dataset: MaskBaseDataset, augmentation: BaseAugmentation, resize: [512, 284], batch_size: 64, valid_batch_size: 64, optimizer: SGD, lr: 0.001, val_ratio: 0.2, criterion: cross_entropy, lr_decay_step: 20, log_interval: 20, log_name: exp, name: test, data_dir: /opt/ml/input/data/train/images, model_dir: ./model}|
