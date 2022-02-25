@@ -19,6 +19,10 @@ from sklearn.model_selection import train_test_split
 from tqdm import tqdm
 import shutil
 from torchmetrics import F1Score
+import gc
+
+gc.collect()
+torch.cuda.empty_cache()
 
 def change_age(x):
     x = int(x)
@@ -28,10 +32,10 @@ def change_age(x):
         return "1"
     else:
         return "0"
-    
+
 def args_getter():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--epochs", required=False, default=10, type=int, help='Num train epochs (default=10)')
+    parser.add_argument("--epochs", required=False, default=100, type=int, help='Num train epochs (default=10)')
     parser.add_argument("--batch_size", required=False, default=32, type=int, help="Num of batch size (default=32)")
     parser.add_argument("--d", required=False, default=0.5, type=float, help="dropout ratio (default=0.5)")
     parser.add_argument("--lr", required=False, default=0.01, type=float, help="Learning rate (default=0.01)")
@@ -56,48 +60,60 @@ def main(args):
     # Create a directory for classes-----------------
     code_dir = os.path.join(base_dir, 'doritos_code')
     classes_dir = os.path.join(code_dir, 'classes')
-    os.mkdir(classes_dir)
-    print("Create a directory for classes : Done!")
-    #------------------------------------------------
     
-    # Create a directories for each class------------------
-    for gender in ['male', 'female']:
+    if not os.path.exists(classes_dir):
+        os.mkdir(classes_dir)
+        print("Create a directory for classes : Done!")
+        
+
+       # Create a directories for each class--------------------------------------
+        num = 0
+        num_dict = {}
         for m in ['wear', 'incorrect', 'notwear']:
-            for age in ['0','1','2']:
-                title = "{}_{}_{}".format(gender, m, age)
-                os.mkdir(os.path.join(classes_dir, title))            
-    print("Create a directories for each class : Done!")
-    #-------------------------------------------------------
+            for gender in ['male', 'female']:    
+                for age in ['0','1','2']:
+                    title = "{}_{}_{}_{}".format(str(num).zfill(2), m, gender, age)
+                    os.mkdir(os.path.join(classes_dir, title))
+                    num_dict[title[3:]] = str(num).zfill(2)
+                    num += 1
+
+        print("Create a directories for each class : Done!")
+
+        # Classifying images into each directory for each class.------------------
+        cnt = 1
+
+        for cate in tqdm(category):
+            _,gen,_,age = cate.split("_")
+            age = change_age(age)
+            pictures = os.listdir(os.path.join(images_dir, cate))
+
+            for pic in pictures:
+                if pic.startswith('incorrect'):
+                    folder = "{}_{}_{}".format('incorrect', gen, age)
+
+                elif pic.startswith('mask'):
+                    folder = "{}_{}_{}".format('wear', gen, age)
+
+                elif pic.startswith('normal'):
+                    folder = "{}_{}_{}".format('notwear', gen, age)
+
+                else:
+                    continue
+
+                folder = f"{num_dict[folder]}_" + folder        
+                file = os.path.join(os.path.join(images_dir, cate), pic)
+                root = os.path.join(classes_dir, folder, str(cnt)+'.jpg')
+
+                shutil.copyfile(file, root)
+                cnt += 1
+        print("Classifying images into each directory for each class. : Done")
+    else:
+        print("'classes' directory already exists.")
+        #--------------------------------------------------------------------------
     
-    # Classifying images into each directory for each class.---------------
-    cnt = 1
-    for cate in tqdm(category):
-        _,gen,_,age = cate.split("_")
-        age = change_age(age)
-        pictures = os.listdir(os.path.join(images_dir, cate))
-
-        for pic in pictures:
-            if pic.startswith('incorrect'):
-                folder = "{}_{}_{}".format(gen, 'incorrect', age)
-
-            elif pic.startswith('mask'):
-                folder = "{}_{}_{}".format(gen, 'wear', age)
-
-            elif pic.startswith('normal'):
-                folder = "{}_{}_{}".format(gen, 'notwear', age)
-
-            else:
-                continue
-
-            file = os.path.join(os.path.join(images_dir, cate), pic)
-            root = os.path.join(classes_dir, folder, str(cnt)+'.jpg')
-
-            shutil.copyfile(file, root)
-            cnt += 1
-    print("Classifying images into each directory for each class. : Done!")
-    #--------------------------------------------------------------------------
     
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    print("device :", device)
 
     transform_base = transforms.Compose([Resize((512 // 3, 384 // 3)), CenterCrop((100, 100)), ToTensor()])
     train_data = ImageFolder(classes_dir, transform = transform_base)
@@ -109,6 +125,7 @@ def main(args):
     
     train_loader = torch.utils.data.DataLoader(train_set, batch_size = args.batch_size, shuffle = True)
     valid_loader = torch.utils.data.DataLoader(valid_set, batch_size = args.batch_size, shuffle = True)
+    
     
     # ResNet model----------------------------------------------------------
     model = torchvision.models.resnet18(pretrained=False)
@@ -122,6 +139,7 @@ def main(args):
 
     optimizer = optim.Adam(params=model.parameters(), lr=0.01)
     criterion = nn.CrossEntropyLoss().to(device)
+    
     
     # train-----------------------------------------------------------------
     loss_ = []
@@ -160,6 +178,7 @@ def main(args):
         if epoch % 5 == 0:
             print("[{}] loss : {:.3f}".format(epoch, running_loss / n))
     #--------------------------------------------------------------------------
+    
     
     # eval---------------------------------------------------------------------
     f1 = F1Score(num_classes = 18, average = 'macro').to(device)
