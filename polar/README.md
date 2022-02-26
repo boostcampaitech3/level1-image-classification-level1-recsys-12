@@ -19,3 +19,6 @@
 |2022-02-24 11:14:43|SENet_crop|0.000114|0.801|0.748|0.77|{epochs: 100, batch_size: 64, drop_out: 0.5, learning_rate: 0.001}|
 |2022-02-24 11:38:23|SENet_NoCrop|2.91e-07|0.254|0.911|0.897|{epochs: 100, batch_size: 64, drop_out: 0.5, learning_rate: 0.001}|
 |2022-02-24 12:14:38|SENet_NoCrop|1e+03|0.166|0.929|0.925|{epochs: 100, batch_size: 64, drop_out: 0.5, learning_rate: 0.001}|
+|2022-02-24 22:22:12|MobileNetV2_4|1e+03|1.6|0.696|0.52|{epochs: 100, batch_size: 64, drop_out: 0.5, learning_rate: 0.001, wandb: true}|
+|2022-02-24 23:18:25|SENet_4_cutmix|1e+03|0.688|0.721|0.736|{epochs: 100, batch_size: 32, drop_out: 0.5, learning_rate: 0.001, wandb: true, beta: 1.0}|
+|2022-02-25 00:09:27|ResNet18_4_cutmix|1e+03|0.572|0.776|0.776|{epochs: 100, batch_size: 32, drop_out: 0.5, learning_rate: 0.001, wandb: true, beta: 1.0}|

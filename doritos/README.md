@@ -1,0 +1,2 @@
+- 이미지별로 class 디렉터리를 생성하여 분류해놓고 ImageFolder() 데이터셋 클래스를 사용함.
+- train_test_split 과정에서 이미지의 경로가 아닌 Tensor 자체를 split 하기 때문에 시간이 꽤 오래 걸린다.
