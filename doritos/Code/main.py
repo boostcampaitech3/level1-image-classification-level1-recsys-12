@@ -115,7 +115,7 @@ def main(args):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print("device :", device)
 
-    transform_base = transforms.Compose([Resize((512 // 3, 384 // 3)), CenterCrop((100, 100)), ToTensor()])
+    transform_base = transforms.Compose([Resize((512 // 3, 384 // 3)), ToTensor()])
     train_data = ImageFolder(classes_dir, transform = transform_base)
     
     print("train_test_split : Start")
@@ -199,7 +199,7 @@ def main(args):
             total += labels.size(0) # 개수 누적(총 개수)
             correct += (pred == labels).sum().item()
 
-            f1_score += f1(outputs, labels)
+            f1_score += f1(pred, labels)
 
     print("\nValid Accuracy : {:.4f}%, loss : {:.4f}, F1 Score : {:.4f}".format(100*correct/total, val_loss/total, f1_score/len(valid_loader)))
     #----------------------------------------------------------------------------
