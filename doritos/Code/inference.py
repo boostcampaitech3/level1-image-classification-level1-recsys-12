@@ -1,6 +1,6 @@
 import os
 import pandas as pd
-from dataset import TestDataset
+from dataset import *
 from torch.utils.data import DataLoader, Dataset
 import torchvision.models
 import torch
@@ -19,15 +19,15 @@ info_id = list(info_df['ImageID'])
 info_img = os.path.join(eval_dir, 'images')
 img_paths = [os.path.join(info_img, img_id) for img_id in info_id]
 
-dataset = TestDataset(img_paths, ((512 // 3, 384 // 3)))
+dataset = TestDataset(img_paths, ((170, 128)))
 
 
-test_loader = DataLoader(dataset, batch_size = 64, shuffle = False)
+test_loader = DataLoader(dataset, batch_size = 128, shuffle = False)
 
 # best_model = torchvision.models.resnet18(pretrained=False)
 # best_model.fc = torch.nn.Linear(in_features=512, out_features=18, bias=True)
 
-best_model = torch.load('044_accuracy_77.86%_best.pt')
+best_model = torch.load('024_acc_92.3810%_loss_0.233250_f1_0.8406.pt')
 # best_model.load_state_dict(torch.load('021_accuracy_97.83%.ckpt'))
 
 best_model.to(device)

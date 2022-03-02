@@ -1,18 +1,23 @@
 import torch
 import torchvision.transforms as transforms
-from torchvision.transforms import Resize, ToTensor, Normalize, CenterCrop
+from torchvision.transforms import *
 from torch.utils.data import DataLoader, Dataset
 from PIL import Image
 import torch.nn as nn
 import torch.nn.functional as F
 
 class TestDataset(Dataset):
-    def __init__(self, img_paths, resize):
+    def __init__(self, img_paths, resize, mean=(0.548, 0.504, 0.479), std=(0.237, 0.247, 0.246)):
         self.img_paths = img_paths
         self.transform = transforms.Compose([
-            Resize(resize),
-#             CenterCrop((100, 100)),
+#             Resize(resize),
+            CenterCrop((120, 85)),            
+#             ColorJitter(0.1, 0.1, 0.1, 0.1),
+#             RandomHorizontalFlip(),
+#             RandomRotation(10),
+#             RandomAffine(0, shear=10, scale=(0.8, 1.2)),
             ToTensor(),
+            Normalize(mean=mean, std=std),
             ])
 
     def __getitem__(self, index):
@@ -79,7 +84,9 @@ class ResNet(nn.Module):
         self.layer3 = self._make_layer(256, num_blocks[2], stride=2)
         self.layer4 = self._make_layer(512, num_blocks[3], stride=2)
         self.gap = nn.AvgPool2d(4) # 4: 필터 사이즈
-        self.fc1 = nn.Linear(10240, 512)
+#         self.fc1 = nn.Linear(10240, 512)
+        self.fc1 = nn.Linear(30720, 512)
+#         self.fc1 = nn.Linear(, 512)
         self.fc2 = nn.Linear(512, num_classes)
 
     def _make_layer(self, out_channels, num_blocks, stride):
