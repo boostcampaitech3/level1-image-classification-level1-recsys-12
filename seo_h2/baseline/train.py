@@ -15,12 +15,15 @@ import torchvision.models
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
+from torch.optim import *
 from torch.optim.lr_scheduler import StepLR
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
+import wandb
 
 from dataset import MaskBaseDataset
 from loss import create_criterion
+import copy
 
 
 def seed_everything(seed):
@@ -88,6 +91,17 @@ def increment_path(path, exist_ok=False):
 
 
 def train(data_dir, model_dir, args):
+    if args.name != 'test':
+        wandb.init(project= 'mask-project', reinit=True,
+                    config={"batch_size": args.batch_size,
+                    "lr"        : args.lr,
+                    "epochs"    : args.epochs,
+                    "name"      : args.name,
+                    "criterion_name" : args.criterion
+                        })
+
+        wandb.run.name = args.name
+
     seed_everything(args.seed)
 
     save_dir = increment_path(os.path.join(model_dir, args.log_name))
@@ -134,22 +148,15 @@ def train(data_dir, model_dir, args):
     )
 
     # -- model
-    # model_module = getattr(import_module("model"), args.model)  # default: BaseModel
-    # model = model_module(
-    #     num_classes=num_classes
-    # ).to(device)
+    model_module = getattr(import_module("model"), args.model)  # default: resnet18
+    model = model_module(
+        num_classes=num_classes
+    ).to(device)
     # model = torch.nn.DataParallel(model)
-    model = torchvision.models.resnet18(pretrained=True)
-    model.fc = torch.nn.Linear(in_features=512, out_features= num_classes, bias=True)
-    torch.nn.init.xavier_uniform_(model.fc.weight)
-    stdv = 1/np.sqrt(512)
-    model.fc.bias.data.uniform_(-stdv, stdv)
-    model.to(device)
-    model = torch.nn.DataParallel(model)
-
+  
     # -- loss & metric
-    criterion = create_criterion(args.criterion)  # default: cross_entropy
-    opt_module = getattr(import_module("torch.optim"), args.optimizer)  # default: SGD
+    criterion = create_criterion(args.criterion)  # default: focal
+    opt_module = getattr(import_module("torch.optim"), args.optimizer)  # default: adam
     optimizer = opt_module(
         filter(lambda p: p.requires_grad, model.parameters()),
         lr=args.lr,
@@ -161,7 +168,10 @@ def train(data_dir, model_dir, args):
     logger = SummaryWriter(log_dir=save_dir)
     with open(os.path.join(save_dir, 'config.json'), 'w', encoding='utf-8') as f:
         json.dump(vars(args), f, ensure_ascii=False, indent=4)
-
+    model_save= copy.copy(model.state_dict())
+    if args.name != 'test':
+        wandb.watch(model,log='gradients',log_freq= args.log_interval)
+    
     best_val_acc = 0
     best_val_f1 = 0
     best_val_loss = np.inf
@@ -203,6 +213,9 @@ def train(data_dir, model_dir, args):
                 logger.add_scalar("Train/f1-score", train_f1, epoch * len(train_loader) + idx)
                 loss_value = 0
                 matches = 0
+                if args.name != 'test':    
+                    wandb.log({'train_loss':train_loss,
+                'train_f1':train_f1})
 
         scheduler.step()
 
@@ -237,6 +250,7 @@ def train(data_dir, model_dir, args):
                         inputs_np, labels, preds, n=16, shuffle=args.dataset != "MaskSplitByProfileDataset"
                     )
 
+
             val_loss = np.sum(val_loss_items) / len(val_loader)
             val_acc = np.sum(val_acc_items) / len(val_set)
             val_f1= f1_score(pred_lst, label_lst, average='macro')
@@ -246,12 +260,16 @@ def train(data_dir, model_dir, args):
             #     torch.save(model, os.path.join(model_dir, 'best_model.pt'))
             #     # torch.save(model.module.state_dict(), f"{save_dir}/best.pth")
             #     best_val_acc = val_acc
-            if val_f1 > best_val_f1:
+            # model.load_state_dict(model_save)
+            
+            if val_f1 > best_val_f1:   
                 print(f"New best model for val f1 score : {val_f1:4.2%}! saving the best model..")
+                # torch.save(model_save, os.path.join(model_dir, '{}_best.pt'.format(args.name)))
                 torch.save(model, os.path.join(model_dir, '{}.pt'.format(args.name)))
                 # torch.save(model.module.state_dict(), f"{save_dir}/best.pth")
                 best_val_f1 = val_f1
             torch.save(model, os.path.join(model_dir, '{}_last.pt'.format(args.name)))
+            # torch.save(model_save, os.path.join(model_dir, '{}.pt'.format(args.name)))
             print(
                 f"[Val] acc : {val_acc:4.2%}, f1: {val_f1:4.2%} , loss: {val_loss:4.2}|| "
                 f"best f1 : {best_val_f1:4.2%}, best loss: {best_val_loss:4.2}")
@@ -261,9 +279,20 @@ def train(data_dir, model_dir, args):
             logger.add_scalar("Val/f1-score", val_f1, epoch)
             logger.add_figure("results", figure, epoch)
             print()
-
-            if args.record=='true':
-                record_expr(args.name, train_loss, val_loss, val_f1, best_val_f1, args)
+            if args.name != 'test':
+                wandb.log({
+                    "Valid loss": val_loss,
+                    "Valid acc" : val_acc,
+                    "Valid f1" : val_f1
+                    })
+                
+        if args.name != 'test':
+            wandb.log({
+                    "confusion_mat": wandb.plot.confusion_matrix(preds=np.array(pred_lst),y_true=np.array(label_lst))
+                    })
+            wandb.log({"Confusion matrix:": wandb.sklearn.plot_confusion_matrix(pred_lst,label_lst)})
+    
+    record_expr(args.name, train_loss, val_loss, val_f1, best_val_f1, args)
 
 
 if __name__ == '__main__':
@@ -275,17 +304,17 @@ if __name__ == '__main__':
 
     # Data and model checkpoints directories
     parser.add_argument('--seed', type=int, default=42, help='random seed (default: 42)')
-    parser.add_argument('--epochs', type=int, default=50, help='number of epochs to train (default: 1)')
-    parser.add_argument('--dataset', type=str, default='MaskBaseDataset', help='dataset augmentation type (default: MaskBaseDataset)')
+    parser.add_argument('--epochs', type=int, default=10, help='number of epochs to train (default: 1)')
+    parser.add_argument('--dataset', type=str, default='MaskSplitByProfileDataset', help='dataset augmentation type (default: MaskBaseDataset)')
     parser.add_argument('--augmentation', type=str, default='BaseAugmentation', help='data augmentation type (default: BaseAugmentation)')
-    parser.add_argument("--resize", nargs="+", type=list, default=[512,284], help='resize size for image when training')
+    parser.add_argument("--resize", nargs="+", type=list, default=[256,192], help='resize size for image when training') #128,96 원래는 512,384
     parser.add_argument('--batch_size', type=int, default=64, help='input batch size for training (default: 64)')
     parser.add_argument('--valid_batch_size', type=int, default=64, help='input batch size for validing (default: 1000)')
-    # parser.add_argument('--model', type=str, default='BaseModel', help='model type (default: BaseModel)')
-    parser.add_argument('--optimizer', type=str, default='SGD', help='optimizer type (default: SGD)')
+    parser.add_argument('--model', type=str, default='resnet18', help='model type (default: resnet18)')
+    parser.add_argument('--optimizer', type=str, default='Adam', help='optimizer type (default: Adam)')
     parser.add_argument('--lr', type=float, default=1e-3, help='learning rate (default: 1e-3)')
     parser.add_argument('--val_ratio', type=float, default=0.2, help='ratio for validaton (default: 0.2)')
-    parser.add_argument('--criterion', type=str, default='cross_entropy', help='criterion type (default: cross_entropy)')
+    parser.add_argument('--criterion', type=str, default='focal', help='criterion type (default: focal)')
     parser.add_argument('--lr_decay_step', type=int, default=20, help='learning rate scheduler deacy step (default: 20)')
     parser.add_argument('--log_interval', type=int, default=20, help='how many batches to wait before logging training status')
     parser.add_argument('--log_name', default='exp', help='log save at {SM_MODEL_DIR}/{log_name}')
@@ -294,7 +323,7 @@ if __name__ == '__main__':
     # Container environment
     parser.add_argument('--data_dir', type=str, default=os.environ.get('SM_CHANNEL_TRAIN', '/opt/ml/input/data/train/images'))
     parser.add_argument('--model_dir', type=str, default=os.environ.get('SM_MODEL_DIR', './model'))
-    parser.add_argument('--record', type=str, default='false')
+
 
     args = parser.parse_args()
     print(args)
