@@ -115,7 +115,7 @@ def main(args):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print("device :", device)
 
-    transform_base = transforms.Compose([Resize((512 // 3, 384 // 3)), ToTensor()])
+    transform_base = transforms.Compose([Resize((512 // 3, 384 // 3)), CenterCrop((100, 100)), ToTensor()])
     train_data = ImageFolder(classes_dir, transform = transform_base)
     
     print("train_test_split : Start")
@@ -178,7 +178,6 @@ def main(args):
         if epoch % 5 == 0:
             print("[{}] loss : {:.3f}".format(epoch, running_loss / n))
     #--------------------------------------------------------------------------
-    
     
     # eval---------------------------------------------------------------------
     f1 = F1Score(num_classes = 18, average = 'macro').to(device)

@@ -25,9 +25,9 @@ from dataset import *
 
 def change_age(x):
     x = int(x)
-    if x >= 60:
+    if x >= 58:
         return "2"
-    elif 30 <= x < 60:
+    elif 30 <= x < 58:
         return "1"
     else:
         return "0"
@@ -108,8 +108,8 @@ print("device :", device)
 mean=(0.548, 0.504, 0.479)
 std=(0.237, 0.247, 0.246)
 transform_base = transforms.Compose([
-#                                      Resize((512 // 3, 384 // 3)), 
-                                     CenterCrop((512//1.5 , 384//2)),
+#                                      Resize((400, 200)), 
+                                     CenterCrop((350 , 250)),
 #                                      ColorJitter(0.1, 0.1, 0.1, 0.1),
 #                                      RandomHorizontalFlip(),
 #                                      RandomRotation(10),
@@ -128,7 +128,7 @@ time2 = time.time()
 print(f"train_test_split : Done, time : {time2-time1:.2f} sec")
 print("train_set : {}, valid_set : {}".format(len(train_set), len(valid_set)))
 
-lr = 0.00005
+lr = 0.00001
 batch_size = 64
 
 train_loader = torch.utils.data.DataLoader(train_set, batch_size = batch_size, shuffle = True)
@@ -145,6 +145,7 @@ f1 = F1Score(num_classes = 18, average = 'macro').to(device)
 # loss_ = []
 n = len(train_loader)
 best_val_loss = np.inf
+best_f1 = 0.0
 counter = 0
 patience = 30
 epochs = 1000
@@ -178,7 +179,7 @@ for epoch in tqdm(range(epochs)):
         train_correct += (pred == labels).sum().item()
     
 #     loss_.append(running_loss / n)
-    print("\n[{}] Train Accuracy : {:.4f}, Train Loss : {:.4f}".format(epoch+1,100*train_correct/train_total, running_loss / n))
+    print("\n[{}] Train Accuracy : {:.4f}, Train Loss : {:.6f}".format(epoch+1,100*train_correct/train_total, running_loss / n))
     
     # wandb 학습 단계에서 Loss, Accuracy 로그 저장
     wandb.log({
@@ -211,10 +212,12 @@ for epoch in tqdm(range(epochs)):
         valid_acc = 100*val_correct/val_total
         valid_f1 = f1_score/len(valid_loader)
         
-        if valid_loss < best_val_loss:
-            print(f"New best model for val loss : {valid_loss:.6f}! saving the best model..")
+        if (valid_loss < best_val_loss) or (valid_f1 > best_f1):
+            print(f"New best model for val loss : {valid_loss:.6f}, val f1 : {valid_f1:.4f} saving the best model..")
             torch.save(resnet, f"{epoch+1:03}_acc_{valid_acc:.4f}%_loss_{valid_loss:.6f}_f1_{valid_f1:.4f}.pt")
-            best_val_loss = valid_loss
+            
+            best_f1 = max(valid_f1, best_f1)
+            best_val_loss = min(valid_loss, best_val_loss)
             counter = 0
         else:
             counter += 1
@@ -223,8 +226,9 @@ for epoch in tqdm(range(epochs)):
             print("Early Stopping...")
             break
             
-    print("\nValid Accuracy : {:.4f}%, loss : {:.4f}, F1 Score : {:.4f}".format(valid_acc, valid_loss, valid_f1))
-    print("Counter :", counter)
+    print("\nval acc : {:.4f}%, val loss : {:.6f}, val F1 : {:.6f}".format(valid_acc, valid_loss, valid_f1))
+    print(f"Best loss : {best_val_loss:.6f}, Best f1 : {best_f1:.4f}")
+    print("Counter : {} / {}".format(counter, patience))
     
     # wandb 검증 단계에서 Loss, Accuracy 로그 저장
     wandb.log({

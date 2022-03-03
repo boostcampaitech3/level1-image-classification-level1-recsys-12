@@ -11,7 +11,7 @@ class TestDataset(Dataset):
         self.img_paths = img_paths
         self.transform = transforms.Compose([
 #             Resize(resize),
-            CenterCrop((120, 85)),            
+            CenterCrop((350 , 250)),
 #             ColorJitter(0.1, 0.1, 0.1, 0.1),
 #             RandomHorizontalFlip(),
 #             RandomRotation(10),
@@ -76,7 +76,7 @@ class ResNet(nn.Module):
         super(ResNet, self).__init__()
         self.in_channels = 64
         self.base = nn.Sequential(
-                        nn.Conv2d(3, 64, kernel_size=3,stride=1, padding=1, bias=False),
+                        nn.Conv2d(3, 64, kernel_size=7,stride=2, padding=3, bias=False),
                         nn.BatchNorm2d(64),
                         nn.ReLU())
         self.layer1 = self._make_layer(64, num_blocks[0], stride=1)
@@ -84,9 +84,10 @@ class ResNet(nn.Module):
         self.layer3 = self._make_layer(256, num_blocks[2], stride=2)
         self.layer4 = self._make_layer(512, num_blocks[3], stride=2)
         self.gap = nn.AvgPool2d(4) # 4: 필터 사이즈
-#         self.fc1 = nn.Linear(10240, 512)
-        self.fc1 = nn.Linear(30720, 512)
-#         self.fc1 = nn.Linear(, 512)
+        self.fc1 = nn.Linear(10240, 512)
+#         self.fc1 = nn.Linear(30720, 512)
+#         self.fc1 = nn.Linear(6144, 512)
+#         self.fc1 = nn.Linear(4096, 512)
         self.fc2 = nn.Linear(512, num_classes)
 
     def _make_layer(self, out_channels, num_blocks, stride):
