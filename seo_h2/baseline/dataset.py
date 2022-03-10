@@ -10,7 +10,9 @@ from PIL import Image
 from torch.utils.data import Dataset, Subset, random_split
 from torchvision import transforms
 from torchvision.transforms import *
-
+import pickle
+# from albumentations import *
+# from albumentations.pytorch import transforms as album
 IMG_EXTENSIONS = [
     ".jpg", ".JPG", ".jpeg", ".JPEG", ".png",
     ".PNG", ".ppm", ".PPM", ".bmp", ".BMP",
@@ -24,7 +26,8 @@ def is_image_file(filename):
 class BaseAugmentation:
     def __init__(self, resize, mean, std, **args):
         self.transform = transforms.Compose([
-            Resize(resize, Image.BILINEAR),
+            # Resize(resize,transforms.InterpolationMode.BICUBIC),
+            # Resize(resize, Image.BILINEAR),
             ToTensor(),
             Normalize(mean=mean, std=std),
         ])
@@ -34,10 +37,6 @@ class BaseAugmentation:
 
 
 class AddGaussianNoise(object):
-    """
-        transform 에 없는 기능들은 이런식으로 __init__, __call__, __repr__ 부분을
-        직접 구현하여 사용할 수 있습니다.
-    """
 
     def __init__(self, mean=0., std=1.):
         self.std = std
@@ -50,10 +49,25 @@ class AddGaussianNoise(object):
         return self.__class__.__name__ + '(mean={0}, std={1})'.format(self.mean, self.std)
 
 
+class CustomSeoh2:
+    def __init__(self, resize, mean,std,**args):
+        self.transform = Compose([
+            Resize(resize[0],resize[1], Image.BILINEAR),
+            # ToGray(p=1),
+            # Sharpen(p=1)
+            album.ToTensorV2(),
+            Normalize(mean=mean, std=std)
+        ])
+
+    def __call__(self, _image):
+        _image= np.array(_image)
+        return self.transform(image=_image)['image']
+
+
 class CustomAugmentation:
     def __init__(self, resize, mean, std, **args):
         self.transform = transforms.Compose([
-            CenterCrop((320, 256)),
+            # CenterCrop((320, 256)),
             Resize(resize, Image.BILINEAR),
             ColorJitter(0.1, 0.1, 0.1, 0.1),
             ToTensor(),
@@ -116,7 +130,21 @@ class MaskBaseDataset(Dataset):
         "mask4": MaskLabels.MASK,
         "mask5": MaskLabels.MASK,
         "incorrect_mask": MaskLabels.INCORRECT,
-        "normal": MaskLabels.NORMAL
+        "normal": MaskLabels.NORMAL,
+        "mask_0": MaskLabels.MASK,
+        "normal_0": MaskLabels.NORMAL,
+        "normal_1": MaskLabels.NORMAL,
+        "normal_2": MaskLabels.NORMAL,
+        "normal_3": MaskLabels.NORMAL,
+        "normal_4": MaskLabels.NORMAL,
+        "normal_5": MaskLabels.NORMAL,
+        "incorrect_mask_0": MaskLabels.INCORRECT,
+        "incorrect_mask_1": MaskLabels.INCORRECT,
+        "incorrect_mask_2": MaskLabels.INCORRECT,
+        "incorrect_mask_3": MaskLabels.INCORRECT,
+        "incorrect_mask_4": MaskLabels.INCORRECT,
+        "incorrect_mask_5": MaskLabels.INCORRECT,
+
     }
 
     image_paths = []
@@ -179,6 +207,10 @@ class MaskBaseDataset(Dataset):
         assert self.transform is not None, ".set_tranform 메소드를 이용하여 transform 을 주입해주세요"
 
         image = self.read_image(index)
+
+        # 이미지 자르기
+        # image=image.crop((50, 100, 300, 400))
+
         mask_label = self.get_mask_label(index)
         gender_label = self.get_gender_label(index)
         age_label = self.get_age_label(index)
@@ -224,26 +256,12 @@ class MaskBaseDataset(Dataset):
         return img_cp
 
     def split_dataset(self) -> Tuple[Subset, Subset]:
-        """
-        데이터셋을 train 과 val 로 나눕니다,
-        pytorch 내부의 torch.utils.data.random_split 함수를 사용하여
-        torch.utils.data.Subset 클래스 둘로 나눕니다.
-        구현이 어렵지 않으니 구글링 혹은 IDE (e.g. pycharm) 의 navigation 기능을 통해 코드를 한 번 읽어보는 것을 추천드립니다^^
-        """
         n_val = int(len(self) * self.val_ratio)
         n_train = len(self) - n_val
         train_set, val_set = random_split(self, [n_train, n_val])
         return train_set, val_set
 
-
 class MaskSplitByProfileDataset(MaskBaseDataset):
-    """
-        train / val 나누는 기준을 이미지에 대해서 random 이 아닌
-        사람(profile)을 기준으로 나눕니다.
-        구현은 val_ratio 에 맞게 train / val 나누는 것을 이미지 전체가 아닌 사람(profile)에 대해서 진행하여 indexing 을 합니다
-        이후 `split_dataset` 에서 index 에 맞게 Subset 으로 dataset 을 분기합니다.
-    """
-
     def __init__(self, data_dir, mean=(0.548, 0.504, 0.479), std=(0.237, 0.247, 0.246), val_ratio=0.2):
         self.indices = defaultdict(list)
         super().__init__(data_dir, mean, std, val_ratio)
@@ -264,6 +282,9 @@ class MaskSplitByProfileDataset(MaskBaseDataset):
         profiles = os.listdir(self.data_dir)
         profiles = [profile for profile in profiles if not profile.startswith(".")]
         split_profiles = self._split_profile(profiles, self.val_ratio)
+        with open(f'split_profiles_seed{32}.pickle','wb') as fw:
+            pickle.dump(split_profiles, fw)
+            print('save indexfile!!!!!!!!!')
 
         cnt = 0
         for phase, indices in split_profiles.items():
@@ -298,7 +319,7 @@ class TestDataset(Dataset):
     def __init__(self, img_paths, resize, mean=(0.548, 0.504, 0.479), std=(0.237, 0.247, 0.246)):
         self.img_paths = img_paths
         self.transform = transforms.Compose([
-            Resize(resize, Image.BILINEAR),
+            # Resize(resize,transforms.InterpolationMode.BICUBIC),
             ToTensor(),
             Normalize(mean=mean, std=std),
         ])

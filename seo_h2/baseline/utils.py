@@ -10,8 +10,8 @@ def record_expr(model_name, best_train_loss, avg_val_loss, avg_val_score, best_v
     # model_state_save_path = base_url+f'/level1-image-classification-level1-recsys-12/polar/model_state/' \
     #                                  f'{model_name}_{current_time.month}{current_time.day}_' \
     #                                  f'{current_time.hour}{current_time.minute}.pt'
-    markdown_path = base_url+'/Boostcamp-AI-Tech/README.md'
-    # markdown_path = base_url+'/level1-image-classification-level1-recsys-12/seo_h2/README.md'
+    markdown_path = base_url+'/level1-image-classification-level1-recsys-12/seo_h2/README.md'
+
     # non_list = ['name', 'mode', 'save']
     # hypers = {k: v for k, v in vars(args).items() if k not in non_list}
     hypers = {k: v for k, v in vars(args).items()}

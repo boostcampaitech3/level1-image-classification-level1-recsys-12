@@ -10,18 +10,7 @@ from dataset import TestDataset, MaskBaseDataset
 
 
 def load_model(saved_model, num_classes, device):
-    # model_cls = getattr(import_module("model"), args.model)
-    # model = model_cls(
-    #     num_classes=num_classes
-    # )
-
-    # # tarpath = os.path.join(saved_model, 'best.tar.gz')
-    # # tar = tarfile.open(tarpath, 'r:gz')
-    # # tar.extractall(path=saved_model)
-
-    # model_path = os.path.join(saved_model, '/best.pth')
-    # model.load_state_dict(torch.load(model_path, map_location=device))
-    model= torch.load(os.path.join(saved_model, 'best_model.pt'))
+    model= torch.load('./results/last_ensemble/3_best.pt') # 추론에 사용할 모델 정의
     return model
 
 
@@ -33,7 +22,6 @@ def inference(data_dir, model_dir, output_dir, args):
     device = torch.device("cuda" if use_cuda else "cpu")
 
     num_classes = MaskBaseDataset.num_classes  # 18
-    # model = load_model(model_dir, num_classes, device).to(device)
     model= load_model(model_dir, num_classes, device).to(device)
     model.eval()
 
@@ -71,8 +59,8 @@ if __name__ == '__main__':
 
     # Data and model checkpoints directories
     parser.add_argument('--batch_size', type=int, default=64, help='input batch size for validing (default: 64)')
-    parser.add_argument('--resize', type=tuple, default=(512,284), help='resize size for image when you trained (default: (512, 284))')
-    # parser.add_argument('--model', type=str, default='BaseModel', help='model type (default: BaseModel)')
+    parser.add_argument('--resize', type=tuple, default=(256,192), help='resize size for image when you trained (default: (512, 284))')
+    parser.add_argument('--model', type=str, default='resnet18', help='model type (default: BaseModel)')
 
     # Container environment
     parser.add_argument('--data_dir', type=str, default=os.environ.get('SM_CHANNEL_EVAL', '/opt/ml/input/data/eval'))

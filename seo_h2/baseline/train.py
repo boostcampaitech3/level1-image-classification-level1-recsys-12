@@ -17,6 +17,8 @@ import numpy as np
 import torch
 from torch.optim import *
 from torch.optim.lr_scheduler import StepLR
+from torch.optim.lr_scheduler import ReduceLROnPlateau
+from torch.optim.lr_scheduler  import CosineAnnealingLR
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 import wandb
@@ -24,7 +26,7 @@ import wandb
 from dataset import MaskBaseDataset
 from loss import create_criterion
 import copy
-
+import pickle
 
 def seed_everything(seed):
     torch.manual_seed(seed)
@@ -39,38 +41,6 @@ def seed_everything(seed):
 def get_lr(optimizer):
     for param_group in optimizer.param_groups:
         return param_group['lr']
-
-
-def grid_image(np_images, gts, preds, n=16, shuffle=False):
-    batch_size = np_images.shape[0]
-    assert n <= batch_size
-
-    choices = random.choices(range(batch_size), k=n) if shuffle else list(range(n))
-    figure = plt.figure(figsize=(12, 18 + 2))  # cautions: hardcoded, 이미지 크기에 따라 figsize 를 조정해야 할 수 있습니다. T.T
-    plt.subplots_adjust(top=0.8)               # cautions: hardcoded, 이미지 크기에 따라 top 를 조정해야 할 수 있습니다. T.T
-    n_grid = np.ceil(n ** 0.5)
-    tasks = ["mask", "gender", "age"]
-    for idx, choice in enumerate(choices):
-        gt = gts[choice].item()
-        pred = preds[choice].item()
-        image = np_images[choice]
-        # title = f"gt: {gt}, pred: {pred}"
-        gt_decoded_labels = MaskBaseDataset.decode_multi_class(gt)
-        pred_decoded_labels = MaskBaseDataset.decode_multi_class(pred)
-        title = "\n".join([
-            f"{task} - gt: {gt_label}, pred: {pred_label}"
-            for gt_label, pred_label, task
-            in zip(gt_decoded_labels, pred_decoded_labels, tasks)
-        ])
-
-        plt.subplot(n_grid, n_grid, idx + 1, title=title)
-        plt.xticks([])
-        plt.yticks([])
-        plt.grid(False)
-        plt.imshow(image, cmap=plt.cm.binary)
-
-    return figure
-
 
 def increment_path(path, exist_ok=False):
     """ Automatically increment path, i.e. runs/exp --> runs/exp0, runs/exp1 etc.
@@ -129,6 +99,7 @@ def train(data_dir, model_dir, args):
     # -- data_loader
     train_set, val_set = dataset.split_dataset()
 
+
     train_loader = DataLoader(
         train_set,
         batch_size=args.batch_size,
@@ -162,7 +133,10 @@ def train(data_dir, model_dir, args):
         lr=args.lr,
         weight_decay=5e-4
     )
-    scheduler = StepLR(optimizer, args.lr_decay_step, gamma=0.5)
+
+    # scheduler = StepLR(optimizer, args.lr_decay_step, gamma=0.5)
+    # scheduler= ReduceLROnPlateau(optimizer, 'min', patience=10)
+    scheduler= CosineAnnealingLR(optimizer, T_max=50, eta_min=0)
 
     # -- logging
     logger = SummaryWriter(log_dir=save_dir)
@@ -217,8 +191,8 @@ def train(data_dir, model_dir, args):
                     wandb.log({'train_loss':train_loss,
                 'train_f1':train_f1})
 
+        # scheduler.step(loss)
         scheduler.step()
-
         # val loop
         with torch.no_grad():
             print("Calculating validation results...")
@@ -243,13 +217,6 @@ def train(data_dir, model_dir, args):
 
                 pred_lst.extend(preds.cpu().numpy())
                 label_lst.extend(labels.cpu().numpy())
-                if figure is None:
-                    inputs_np = torch.clone(inputs).detach().cpu().permute(0, 2, 3, 1).numpy()
-                    inputs_np = dataset_module.denormalize_image(inputs_np, dataset.mean, dataset.std)
-                    figure = grid_image(
-                        inputs_np, labels, preds, n=16, shuffle=args.dataset != "MaskSplitByProfileDataset"
-                    )
-
 
             val_loss = np.sum(val_loss_items) / len(val_loader)
             val_acc = np.sum(val_acc_items) / len(val_set)
@@ -264,12 +231,11 @@ def train(data_dir, model_dir, args):
             
             if val_f1 > best_val_f1:   
                 print(f"New best model for val f1 score : {val_f1:4.2%}! saving the best model..")
-                # torch.save(model_save, os.path.join(model_dir, '{}_best.pt'.format(args.name)))
                 torch.save(model, os.path.join(model_dir, '{}.pt'.format(args.name)))
-                # torch.save(model.module.state_dict(), f"{save_dir}/best.pth")
+    
                 best_val_f1 = val_f1
             torch.save(model, os.path.join(model_dir, '{}_last.pt'.format(args.name)))
-            # torch.save(model_save, os.path.join(model_dir, '{}.pt'.format(args.name)))
+          
             print(
                 f"[Val] acc : {val_acc:4.2%}, f1: {val_f1:4.2%} , loss: {val_loss:4.2}|| "
                 f"best f1 : {best_val_f1:4.2%}, best loss: {best_val_loss:4.2}")
@@ -277,7 +243,7 @@ def train(data_dir, model_dir, args):
             logger.add_scalar("Val/loss", val_loss, epoch)
             logger.add_scalar("Val/accuracy", val_acc, epoch)
             logger.add_scalar("Val/f1-score", val_f1, epoch)
-            logger.add_figure("results", figure, epoch)
+            # logger.add_figure("results", figure, epoch)
             print()
             if args.name != 'test':
                 wandb.log({
@@ -290,24 +256,28 @@ def train(data_dir, model_dir, args):
             wandb.log({
                     "confusion_mat": wandb.plot.confusion_matrix(preds=np.array(pred_lst),y_true=np.array(label_lst))
                     })
-            wandb.log({"Confusion matrix:": wandb.sklearn.plot_confusion_matrix(pred_lst,label_lst)})
-    
-    record_expr(args.name, train_loss, val_loss, val_f1, best_val_f1, args)
+            wandb.log({
+                "confusion_matrix": wandb.sklearn.plot_confusion_matrix(np.array(label_lst),np.array(pred_lst))
+            })
+        # early stopping
+        if current_lr < 1e-8:
+            print("too small learning rate! early stop!!!")
+            break
 
+    record_expr(args.name, train_loss, val_loss, val_f1, best_val_f1, args)
+    print('record experiments!!!')
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
-    #from dotenv import load_dotenv
     import os
-    #load_dotenv(verbose=True)
 
     # Data and model checkpoints directories
-    parser.add_argument('--seed', type=int, default=42, help='random seed (default: 42)')
+    parser.add_argument('--seed', type=int, default=32, help='random seed (default: 42)') # 시드 바꾸면 dataset에서seed도 바꿔주기
     parser.add_argument('--epochs', type=int, default=10, help='number of epochs to train (default: 1)')
     parser.add_argument('--dataset', type=str, default='MaskSplitByProfileDataset', help='dataset augmentation type (default: MaskBaseDataset)')
     parser.add_argument('--augmentation', type=str, default='BaseAugmentation', help='data augmentation type (default: BaseAugmentation)')
-    parser.add_argument("--resize", nargs="+", type=list, default=[256,192], help='resize size for image when training') #128,96 원래는 512,384
+    parser.add_argument("--resize", nargs="+", type=list, default=[512,384], help='resize size for image when training') #128,96 원래는 512,384
     parser.add_argument('--batch_size', type=int, default=64, help='input batch size for training (default: 64)')
     parser.add_argument('--valid_batch_size', type=int, default=64, help='input batch size for validing (default: 1000)')
     parser.add_argument('--model', type=str, default='resnet18', help='model type (default: resnet18)')
@@ -321,7 +291,7 @@ if __name__ == '__main__':
     parser.add_argument('--name', default='best_model', help='model save at {SM_MODEL_DIR}/{name}')
 
     # Container environment
-    parser.add_argument('--data_dir', type=str, default=os.environ.get('SM_CHANNEL_TRAIN', '/opt/ml/input/data/train/images'))
+    parser.add_argument('--data_dir', type=str, default=os.environ.get('SM_CHANNEL_TRAIN', '/opt/ml/input/data/train/images2'))
     parser.add_argument('--model_dir', type=str, default=os.environ.get('SM_MODEL_DIR', './model'))
 
 

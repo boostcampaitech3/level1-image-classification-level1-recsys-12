@@ -42,7 +42,7 @@ class LabelSmoothingLoss(nn.Module):
 
 # https://gist.github.com/SuperShinyEyes/dcc68a08ff8b615442e3bc6a9b55a354
 class F1Loss(nn.Module):
-    def __init__(self, classes=3, epsilon=1e-7):
+    def __init__(self, classes=18, epsilon=1e-7):
         super().__init__()
         self.classes = classes
         self.epsilon = epsilon
@@ -61,7 +61,7 @@ class F1Loss(nn.Module):
         recall = tp / (tp + fn + self.epsilon)
 
         f1 = 2 * (precision * recall) / (precision + recall + self.epsilon)
-        f1 = f1.clamp(min=self.epsilon, max=1 - self.epsilon)
+        f1 = f1.clamp(min=self.epsilon, max=1 - self.epsilon) # min에서 max값으로 자름
         return 1 - f1.mean()
 
 
